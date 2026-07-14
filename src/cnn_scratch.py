@@ -10,7 +10,16 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 import time
+from colorama import Fore, init
 from pathlib import Path
+
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score
+)
 
 from rich.console import Group
 from rich.table import Table
@@ -25,6 +34,7 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 
+init(autoreset=True)
 IMG_SIZE = 224 # width * height
 DATASET = datasets.ImageFolder(root=Path("./data/wbcs/"), transform=None) # no transform yet
 LENGTH = [0.80, 0.10, 0.10]
@@ -87,29 +97,50 @@ class CNN(nn.Module):
         super().__init__()
 
         self.features = nn.Sequential(
-            nn.Conv2d(3, 16, kernel_size=3, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2), # 224 to 112
-
-            nn.Conv2d(16, 32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2), # 112 to 56
-
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            # 224 to 112
+            nn.Conv2d(3, 64, 3, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(2), # 56 to 28
+            nn.MaxPool2d(2),
+
+            # 112 to 56
+            nn.Conv2d(64, 128, 3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+
+            # 56 to 28
+            nn.Conv2d(128, 256, 3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+
+            # 28 to 14
+            nn.Conv2d(256, 512, 3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+
+            # 14 to 7
+            nn.Conv2d(512, 512, 3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
         )
 
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.avgpool = nn.AdaptiveAvgPool2d((4, 4))
 
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(64, 128),
+
+            nn.Linear(8192, 256),
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
+
+            nn.Linear(256, 128),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.4),
+
             nn.Linear(128, num_classes),
         )
 
@@ -129,7 +160,8 @@ def make_table(history, epochs):
     table.add_column("Epoch", justify="center")
     table.add_column("Loss", justify="center")
     table.add_column("Accuracy", justify="center")
-    table.add_column("Valid", justify="center")
+    table.add_column("Val-Loss", justify="center")
+    table.add_column("Valid-Acc", justify="center")
     table.add_column("Duration(s)", justify="center")
     
     for h in history:
@@ -137,6 +169,7 @@ def make_table(history, epochs):
             f"{h['epoch']}/{epochs}",
             f"{h['loss']:.4f}",
             f"{h['acc']:.2f}%",
+            f'{h['val_loss']:.4f}',
             f"{h['val_acc']:.2f}%",
             f"{h['duration']:.2f}",
         )
@@ -206,6 +239,63 @@ def validate(model, dataloader, criterion, device) -> tuple[float | Any]:
         
         return val_loss, val_acc
     
+@torch.no_grad()
+def evaluate_metrics(model, dataloader, device) -> dict[str, float | int]:
+    model.eval()
+    
+    y_true, y_pred, y_prob = [], [], []
+    
+    for images, labels in dataloader:
+        images = images.to(device)
+        labels = labels.to(device)
+        
+        outputs = model(images)
+        
+        probs = torch.softmax(outputs, dim=1)
+        preds = probs.argmax(dim=1)
+        
+        y_true.extend(labels.cpu().numpy())
+        y_pred.extend(preds.cpu().numpy())
+        y_prob.extend(probs.cpu().numpy())
+        
+    accuracy = accuracy_score(y_true, y_pred)
+    
+    precision = precision_score(
+        y_true,
+        y_pred,
+        average="macro",
+        zero_division=0
+    )
+    
+    recall = recall_score(
+        y_true,
+        y_pred,
+        average="macro",
+        zero_division=0
+    )
+    
+    f1 = f1_score(
+        y_true,
+        y_pred,
+        average="macro",
+        zero_division=0
+    )
+    
+    roc_auc = roc_auc_score(
+        y_true,
+        y_prob,
+        multi_class="ovr",
+        average="macro"
+    )
+    
+    return {
+        "accuracy": accuracy,
+        "precision": precision,
+        "f1_score": f1,
+        "recall": recall,
+        "roc_auc": roc_auc
+    }
+
 def train(model, train_dataloader, val_dataloader, criterion, optimizer, device, epochs: int, save_path: Path | str):
     history = []
     
@@ -252,6 +342,7 @@ def train(model, train_dataloader, val_dataloader, criterion, optimizer, device,
                 "epoch": epoch + 1,
                 "loss": train_loss,
                 "acc": train_acc,
+                "val_loss": val_loss,
                 "val_acc": val_acc,
                 "duration": duration,
             })
@@ -280,11 +371,12 @@ def train(model, train_dataloader, val_dataloader, criterion, optimizer, device,
                 
     print(f'Best: E:{best_epoch} | Validation Accuracy: {best_val_acc:.2f}')
   
-print(f'Device: {Device}')
-print(f'Number of Classes: {DATASET.classes}')
-print(f'Class [index]: {DATASET.class_to_idx}')
-print(f'Started training...')
-print(f'Model: {model}')
+print(f'{Fore.CYAN}Number of Classes:{Fore.RESET} {DATASET.classes}')
+print(f'{Fore.CYAN}Class:{Fore.RESET} {DATASET.class_to_idx}')
+print(f'{Fore.CYAN}Model:{Fore.RESET} {model}')
+print(f'{Fore.CYAN}Parameters:{Fore.RESET} {(sum(p.numel() for p in model.parameters()))}')
+print(f'{Fore.CYAN}Trainable:{Fore.RESET} {(sum(p.numel() for p in model.parameters() if p.requires_grad))}')
+print(f'{Fore.CYAN}Device:{Fore.RESET} {Device}')
 
 train(
     model,
@@ -294,5 +386,13 @@ train(
     optimizer,
     Device,
     EPOCHS,
-    "model.pt"
+    "model/model.pth"
 )
+
+checkpoint = torch.load("model/model.pth", map_location=Device, weights_only=True)
+model.load_state_dict(checkpoint["model_state_dict"])
+
+metrics = evaluate_metrics(model, test_dataloader, Device)
+
+for name, value in metrics.items():
+    print(f'{Fore.CYAN}{name:10s}{Fore.RESET}: {value:.4f}')
