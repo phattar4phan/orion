@@ -382,7 +382,7 @@ train(
     optimizer,
     Device,
     EPOCHS,
-    "model/model.pth"
+    "model/scratch.pth"
 )
 
 checkpoint = torch.load("model/model.pth", map_location=Device, weights_only=True)
