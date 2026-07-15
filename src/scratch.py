@@ -385,7 +385,7 @@ train(
     "model/scratch.pth"
 )
 
-checkpoint = torch.load("model/model.pth", map_location=Device, weights_only=True)
+checkpoint = torch.load("model/scratch.pth", map_location=Device, weights_only=True)
 model.load_state_dict(checkpoint["model_state_dict"])
 
 metrics, report = evaluate_metrics(model, test_dataloader, Device, DATASET.classes)
