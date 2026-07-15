@@ -36,7 +36,7 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 
-from src.utils.prediction import test_single
+from utils.prediction import test_single
 
 init(autoreset=True)
 IMG_SIZE = 224 # width * height
