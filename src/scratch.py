@@ -10,6 +10,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 import time
+import random
 from colorama import Fore, init
 from pathlib import Path
 
@@ -18,7 +19,8 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     f1_score,
-    roc_auc_score
+    roc_auc_score,
+    classification_report
 )
 
 from rich.console import Group
@@ -33,6 +35,8 @@ from rich.progress import (
     TimeElapsedColumn,
     TimeRemainingColumn,
 )
+
+from src.utils.prediction import test_single
 
 init(autoreset=True)
 IMG_SIZE = 224 # width * height
@@ -154,6 +158,24 @@ model = CNN(num_classes=4).to(Device)
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
+# randomly select one test file
+def random_test_image(root: Path | str) -> Path:
+    _root = Path(root)
+    
+    # get all class directories
+    class_dirs = [d for d in _root.iterdir() if d.is_dir()]
+    
+    # randomly select one class
+    class_dir = random.choice(class_dirs)
+    
+    # get all files in that class directory
+    image = [
+        p for p in class_dir.iterdir()
+        if p.suffix.lower() in {".jpg", ".jpeg", ".webp", ".png"}
+    ]
+    
+    return random.choice(image)
+    
 def make_table(history, epochs):
     table = Table(title="Training Logs")
     
@@ -240,7 +262,7 @@ def validate(model, dataloader, criterion, device) -> tuple[float | Any]:
         return val_loss, val_acc
     
 @torch.no_grad()
-def evaluate_metrics(model, dataloader, device) -> dict[str, float | int]:
+def evaluate_metrics(model, dataloader, classes, device) -> dict[str, float | int]:
     model.eval()
     
     y_true, y_pred, y_prob = [], [], []
@@ -258,43 +280,17 @@ def evaluate_metrics(model, dataloader, device) -> dict[str, float | int]:
         y_pred.extend(preds.cpu().numpy())
         y_prob.extend(probs.cpu().numpy())
         
-    accuracy = accuracy_score(y_true, y_pred)
-    
-    precision = precision_score(
-        y_true,
-        y_pred,
-        average="macro",
-        zero_division=0
-    )
-    
-    recall = recall_score(
-        y_true,
-        y_pred,
-        average="macro",
-        zero_division=0
-    )
-    
-    f1 = f1_score(
-        y_true,
-        y_pred,
-        average="macro",
-        zero_division=0
-    )
-    
-    roc_auc = roc_auc_score(
-        y_true,
-        y_prob,
-        multi_class="ovr",
-        average="macro"
-    )
-    
-    return {
-        "accuracy": accuracy,
-        "precision": precision,
-        "f1_score": f1,
-        "recall": recall,
-        "roc_auc": roc_auc
+    metrics = {
+        "accuracy": accuracy_score(y_true, y_pred),
+        "precision": precision_score(y_true, y_pred, average="macro", zero_division=0),
+        "recall": recall_score(y_true, y_pred, average="macro", zero_division=0),
+        "f1": f1_score(y_true, y_pred, average="macro", zero_division=0),
+        "roc_auc": roc_auc_score(y_true, y_prob, multi_class="ovr", average="macro")
     }
+    
+    reports = classification_report(y_true, y_pred, target_names=classes, digits=4, zero_division=0)
+    
+    return metrics, reports
 
 def train(model, train_dataloader, val_dataloader, criterion, optimizer, device, epochs: int, save_path: Path | str):
     history = []
@@ -392,7 +388,12 @@ train(
 checkpoint = torch.load("model/model.pth", map_location=Device, weights_only=True)
 model.load_state_dict(checkpoint["model_state_dict"])
 
-metrics = evaluate_metrics(model, test_dataloader, Device)
+metrics, report = evaluate_metrics(model, test_dataloader, Device, DATASET.classes)
 
 for name, value in metrics.items():
-    print(f'{Fore.CYAN}{name:10s}{Fore.RESET}: {value:.4f}')
+    print(f'{name:10s}: {value:.4f}')
+    
+print(report)
+
+img = random_test_image(Path("./data/split/test"))
+test_single(model, img, test_transform, Device, DATASET.classes)
