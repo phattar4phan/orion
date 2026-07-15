@@ -388,10 +388,10 @@ train(
 checkpoint = torch.load("model/scratch.pth", map_location=Device, weights_only=True)
 model.load_state_dict(checkpoint["model_state_dict"])
 
-metrics, report = evaluate_metrics(model, test_dataloader, Device, DATASET.classes)
+metrics, report = evaluate_metrics(model, test_dataloader, DATASET.classes, Device)
 
 for name, value in metrics.items():
-    print(f'{name:10s}: {value:.4f}')
+    print(f'{Fore.CYAN}{name:10s}{Fore.RESET}: {value:.4f}')
     
 print(report)
 
