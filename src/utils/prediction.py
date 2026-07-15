@@ -37,7 +37,13 @@ def _predict_(model, image_path: Path | str, transform, device, classes: list):
 def test_single(model, image_path: Path | str, transform, device, classes: list) -> dict[str, int | float]:
     result = _predict_(model, image_path, transform, device, classes)
     
-    actual = Path(image_path).parent.name
+    _actual_maps = {
+        "BAS": "basophil",
+        "EOS": "eosinophil",
+        "MONO": "monocyte",
+        "NEUT": "neutrophil"
+    }
+    actual = _actual_maps[Path(image_path).parent.name]
     
     correct = result['class'] == actual
     
