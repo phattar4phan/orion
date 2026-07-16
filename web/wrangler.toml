@@ -1,0 +1,7 @@
+name = "orion-web"
+compatibility_date = "2025-07-16"
+main = "worker/index.ts"
+assets = { directory = "dist", binding = "ASSETS" }
+
+[observability]
+enabled = true
