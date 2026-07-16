@@ -1,15 +1,17 @@
 from typing import Any
 
 import torch
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision.transforms import v2
 
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 
+import onnx
+
 import time
+import copy
 import random
 from colorama import Fore, init
 from pathlib import Path
@@ -262,7 +264,7 @@ def validate(model, dataloader, criterion, device) -> tuple[float | Any]:
         return val_loss, val_acc
     
 @torch.no_grad()
-def evaluate_metrics(model, dataloader, classes, device) -> dict[str, float | int]:
+def evaluate_metrics(model, dataloader, classes, device) -> tuple[dict[str, float], str]:
     model.eval()
     
     y_true, y_pred, y_prob = [], [], []
@@ -295,8 +297,9 @@ def evaluate_metrics(model, dataloader, classes, device) -> dict[str, float | in
 def train(model, train_dataloader, val_dataloader, criterion, optimizer, device, epochs: int, save_path: Path | str):
     history = []
     
-    best_val_acc = 0.0
+    best_val_acc = float("-inf")
     best_epoch = 0
+    best_state = None
     
     progress = Progress(
                 TextColumn("[bold cyan]Epoch {task.fields[epoch]}"),
@@ -309,10 +312,7 @@ def train(model, train_dataloader, val_dataloader, criterion, optimizer, device,
         TextColumn("Accuracy: {task.fields[acc]:.2f}%"),
     )
     
-    with Live(
-        Group(make_table(history, epochs), progress),
-        refresh_per_second=10,
-    ) as live:
+    with Live(Group(make_table(history, epochs), progress), refresh_per_second=10) as live:
         for epoch in range(epochs):
             task = progress.add_task(
                 "",
@@ -354,27 +354,38 @@ def train(model, train_dataloader, val_dataloader, criterion, optimizer, device,
             
             if val_acc > best_val_acc:
                 best_val_acc = val_acc
+                best_state = copy.deepcopy(model.state_dict())
                 best_epoch = epoch + 1
                 
-                torch.save({
-                    "epoch": best_epoch,
-                    "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "train_loss": train_loss,
-                    "val_loss": val_loss,
-                    "val_acc": val_acc,
-                }, save_path)
+        model.load_state_dict(best_state)
+        model.eval()
+        
+        dummy = torch.randn(1, 3, 224, 224, device=device)
                 
+        with torch.inference_mode():
+            torch.onnx.export(
+                model,
+                dummy,
+                save_path,
+                dynamo=True
+            )
+    
     print(f'Best: E:{best_epoch} | Validation Accuracy: {best_val_acc:.2f}')
+    
+    onnx_model = onnx.load(save_path)
+    onnx.checker.check_model(onnx_model)
+    print(f'.onnx export {Fore.GREEN}verified.')
+    
+    return model
   
 print(f'{Fore.CYAN}Number of Classes:{Fore.RESET} {DATASET.classes}')
 print(f'{Fore.CYAN}Class:{Fore.RESET} {DATASET.class_to_idx}')
 print(f'{Fore.CYAN}Model:{Fore.RESET} {model}')
 print(f'{Fore.CYAN}Parameters:{Fore.RESET} {(sum(p.numel() for p in model.parameters()))}')
 print(f'{Fore.CYAN}Trainable:{Fore.RESET} {(sum(p.numel() for p in model.parameters() if p.requires_grad))}')
-print(f'{Fore.CYAN}Device:{Fore.RESET} {Device}')
+print(f'{Fore.CYAN}Device:{Fore.RESET} {Device}\n')
 
-train(
+best_model = train(
     model,
     train_dataloader,
     val_dataloader,
@@ -382,13 +393,10 @@ train(
     optimizer,
     Device,
     EPOCHS,
-    "model/scratch.pth"
+    "model/scratch.onnx"
 )
 
-checkpoint = torch.load("model/scratch.pth", map_location=Device, weights_only=True)
-model.load_state_dict(checkpoint["model_state_dict"])
-
-metrics, report = evaluate_metrics(model, test_dataloader, DATASET.classes, Device)
+metrics, report = evaluate_metrics(best_model, test_dataloader, DATASET.classes, Device)
 
 for name, value in metrics.items():
     print(f'{Fore.CYAN}{name:10s}{Fore.RESET}: {value:.4f}')
@@ -396,4 +404,4 @@ for name, value in metrics.items():
 print(report)
 
 img = random_test_image(Path("./data/split/test"))
-test_single(model, img, test_transform, Device, DATASET.classes)
+test_single(best_model, img, test_transform, Device, DATASET.classes)
