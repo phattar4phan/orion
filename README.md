@@ -1,5 +1,5 @@
 ## Orion
-A Stardance Project that compares 5 different CNN models and find the best model architecture for classifying White Blood Cells (WBCs)
+Classify white blood cell with a trained-from-scratch CNN model.
 
 The model total parameters is 6,044,548 parameters, with the best validation accuracy of 99.19%
 
