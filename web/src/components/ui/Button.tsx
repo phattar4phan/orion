@@ -1,47 +1,55 @@
-import { motion } from 'framer-motion';
-import { ButtonHTMLAttributes, forwardRef } from 'react';
+import { forwardRef } from "react"
+import { motion, type HTMLMotionProps } from "framer-motion"
+import { Loader2 } from "lucide-react"
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'glass' | 'ghost';
-  size?: 'sm' | 'md' | 'lg';
-  loading?: boolean;
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger"
+type ButtonSize = "sm" | "md" | "lg"
+
+interface ButtonProps extends Omit<HTMLMotionProps<"button">, "children"> {
+  variant?: ButtonVariant
+  size?: ButtonSize
+  loading?: boolean
+  icon?: React.ReactNode
+  children: React.ReactNode
 }
 
-const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = 'glass', size = 'md', loading, children, className = '', ...props }, ref) => {
-    const base =
-      'relative inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none';
+const variantClasses: Record<ButtonVariant, string> = {
+  primary:
+    "bg-white text-black hover:bg-white/90 shadow-glass-sm",
+  secondary:
+    "bg-white/5 text-white hover:bg-white/10 ring-1 ring-white/10",
+  ghost:
+    "bg-transparent text-white/60 hover:text-white hover:bg-white/5",
+  danger:
+    "bg-red-500/10 text-red-400 hover:bg-red-500/20 ring-1 ring-red-500/20",
+}
 
-    const variants: Record<string, string> = {
-      primary: 'bg-white text-black hover:bg-white/90',
-      glass: 'glass text-white/90 hover:bg-white/[0.06] hover:text-white hover:border-white/[0.10]',
-      ghost: 'text-white/50 hover:bg-white/[0.05] hover:text-white/80',
-    };
+const sizeClasses: Record<ButtonSize, string> = {
+  sm: "h-8 px-3 text-xs rounded-lg gap-1.5",
+  md: "h-10 px-4 text-sm rounded-xl gap-2",
+  lg: "h-12 px-6 text-sm rounded-xl gap-2",
+}
 
-    const sizes: Record<string, string> = {
-      sm: 'px-3 py-1.5 text-xs',
-      md: 'px-5 py-2.5 text-sm',
-      lg: 'px-6 py-3 text-sm',
-    };
-
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ variant = "primary", size = "md", loading, icon, children, className = "", disabled, ...props }, ref) => {
     return (
       <motion.button
         ref={ref}
-        className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
-        whileTap={{ scale: 0.98 }}
-        {...(props as any)}
+        whileHover={{ scale: disabled || loading ? 1 : 1.02 }}
+        whileTap={{ scale: disabled || loading ? 1 : 0.98 }}
+        className={`inline-flex items-center justify-center font-medium transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+        disabled={disabled || loading}
+        {...props}
       >
-        {loading && (
-          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-        )}
+        {loading ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : icon ? (
+          <span className="shrink-0">{icon}</span>
+        ) : null}
         {children}
       </motion.button>
-    );
+    )
   }
-);
+)
 
-Button.displayName = 'Button';
-export default Button;
+Button.displayName = "Button"

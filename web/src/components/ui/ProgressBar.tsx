@@ -1,28 +1,36 @@
-import { motion } from 'framer-motion';
+import { motion } from "framer-motion"
 
 interface ProgressBarProps {
-  value: number;
-  label?: string;
-  className?: string;
+  value: number
+  max?: number
+  label?: string
+  showPercentage?: boolean
+  size?: "sm" | "md" | "lg"
+  className?: string
 }
 
-export default function ProgressBar({ value, label, className = '' }: ProgressBarProps) {
+const heights = { sm: "h-1", md: "h-1.5", lg: "h-2" }
+
+export function ProgressBar({ value, max = 100, label, showPercentage = true, size = "md", className = "" }: ProgressBarProps) {
+  const pct = Math.min(Math.round((value / max) * 100), 100)
+
   return (
-    <div className={`${className}`}>
-      {label && (
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-white/50">{label}</span>
-          <span className="text-xs text-white/40 font-mono">{Math.round(value)}%</span>
+    <div className={`space-y-1.5 ${className}`}>
+      {(label || showPercentage) && (
+        <div className="flex items-center justify-between">
+          {label && <span className="text-xs font-medium text-white/50">{label}</span>}
+          {showPercentage && <span className="text-xs text-white/40 tabular-nums">{pct}%</span>}
         </div>
       )}
-      <div className="h-1.5 bg-white/[0.04] rounded-full overflow-hidden">
+      <div className={`w-full ${heights[size]} bg-white/[0.04] overflow-hidden`} style={{ borderRadius: 999 }}>
         <motion.div
-          className="h-full bg-white/30 rounded-full"
           initial={{ width: 0 }}
-          animate={{ width: `${value}%` }}
-          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className={`h-full bg-white/80`}
+          style={{ borderRadius: 999 }}
         />
       </div>
     </div>
-  );
+  )
 }

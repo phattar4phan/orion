@@ -230,14 +230,12 @@ datasets/
 raw_data/
 
 # models
-model/
 *.bin
 *.pt
 *.pth
 *.ckpt
 *.safetensors
 *.gguf
-*.onnx
 *.pkl
 *.h5
 *.pb
