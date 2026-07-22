@@ -1,47 +1,44 @@
-export interface AnalysisResult {
-  id: string;
-  modelName: string;
-  prediction: string;
-  confidence: number;
-  inferenceTimeMs: number;
-  rank: number;
+export type WbcClass = "basophil" | "eosinophil" | "neutrophil" | "monocyte"
+
+export interface ClassProbability {
+  className: WbcClass
+  label: string
+  probability: number
 }
 
-export interface HistoryItem {
-  id: string;
-  imageUrl: string;
-  imageName: string;
-  mode: 'concurrent' | 'sequential';
-  models: string[];
-  results: AnalysisResult[];
-  winner: AnalysisResult;
-  createdAt: string;
-  totalDurationMs: number;
+export interface InferenceResult {
+  topPrediction: WbcClass
+  topLabel: string
+  confidence: number
+  probabilities: ClassProbability[]
+  inferenceTime: number
+  timestamp: number
+  status: "idle" | "running" | "completed" | "error"
 }
 
-export interface ModelInfo {
-  id: string;
-  name: string;
-  description: string;
-  architecture: string;
-  speed: 'fast' | 'medium' | 'slow';
-  accuracy: 'high' | 'medium' | 'low';
-  resourceUsage: 'low' | 'medium' | 'high';
-  parameters: string;
+export interface AnalysisJob {
+  id: string
+  imageName: string
+  imageUrl: string
+  result: InferenceResult
+  createdAt: number
+  completedAt: number | null
+  status: "preparing" | "running" | "completed" | "error"
+  progress: number
 }
 
-export interface UserSettings {
-  appearance: 'dark';
-  animationsEnabled: boolean;
-  defaultExecutionMode: 'concurrent' | 'sequential';
-  defaultModels: string[];
-  resultsPerPage: number;
+export interface HistoryEntry {
+  id: string
+  imageName: string
+  imageUrl: string
+  topPrediction: WbcClass
+  topLabel: string
+  confidence: number
+  inferenceTime: number
+  createdAt: number
 }
 
-export type ExecutionMode = 'concurrent' | 'sequential';
-
-export interface UploadState {
-  file: File | null;
-  previewUrl: string | null;
-  isUploading: boolean;
+export interface SortConfig {
+  key: string
+  direction: "asc" | "desc"
 }

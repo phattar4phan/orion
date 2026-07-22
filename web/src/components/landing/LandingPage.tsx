@@ -1,265 +1,517 @@
-import { motion, useScroll, useTransform } from 'framer-motion';
-import { useRef } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowRight, Sparkles, Zap, BarChart3, Shield, Cpu } from 'lucide-react';
+import { useState, useCallback, useRef } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import {
+  Gauge,
+  Brain,
+  TrendingUp,
+  Activity,
+  Shield,
+  Upload,
+  Image,
+  X,
+  Check,
+  CheckCircle2,
+  Loader2,
+  ArrowRight,
+  FileImage,
+} from "lucide-react"
+import { Button } from "../ui/Button"
+import { Card } from "../ui/Card"
+import { Badge } from "../ui/Badge"
+import { ProgressBar } from "../ui/ProgressBar"
+import { preprocessImage, runInference, type ApiResponse } from "../../lib/inference"
+import { WBC_CLASSES } from "../../lib/models"
 
-function HeroBackground() {
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      <div
-        className="glow-orb w-[800px] h-[800px] -top-40 left-1/2 -translate-x-1/2"
-        style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%)' }}
-      />
-      <div
-        className="glow-orb w-[500px] h-[500px] top-1/2 -left-20"
-        style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.03) 0%, transparent 70%)' }}
-      />
-      <div
-        className="glow-orb w-[600px] h-[600px] -bottom-40 right-0"
-        style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.04) 0%, transparent 70%)' }}
-      />
-
-      {/* Grid pattern */}
-      <div
-        className="absolute inset-0 opacity-[0.03]"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
-          backgroundSize: '64px 64px',
-        }}
-      />
-    </div>
-  );
+const trainingData = {
+  epochs: 20,
+  trainAcc: [61.48, 87.38, 92.04, 94.32, 95.18, 95.49, 96.43, 96.71, 96.69, 97.14, 97.43, 97.62, 97.73, 97.68, 97.80, 98.12, 98.07, 98.18, 98.09, 98.30],
+  validAcc: [92.25, 95.82, 96.74, 97.72, 97.93, 93.79, 98.14, 98.67, 98.63, 98.46, 98.60, 98.81, 98.07, 98.84, 99.19, 99.12, 99.05, 99.16, 99.16, 98.39],
 }
 
-function FloatingCards() {
-  return (
-    <div className="relative h-96">
-      {[
-        { x: '10%', y: '10%', rotate: -6, delay: 0 },
-        { x: '60%', y: '5%', rotate: 3, delay: 0.2 },
-        { x: '75%', y: '60%', rotate: -2, delay: 0.4 },
-        { x: '20%', y: '65%', rotate: 4, delay: 0.6 },
-        { x: '45%', y: '40%', rotate: -5, delay: 0.3 },
-      ].map((card, i) => (
-        <motion.div
-          key={i}
-          className="absolute w-48 h-32 glass rounded-xl p-4"
-          style={{ left: card.x, top: card.y }}
-          animate={{
-            y: [0, -12, 0],
-            rotate: [card.rotate, card.rotate + 1, card.rotate],
-          }}
-          transition={{
-            duration: 5,
-            delay: card.delay,
-            repeat: Infinity,
-            ease: 'easeInOut',
-          }}
-        >
-          <div className="h-2 w-3/4 bg-white/[0.08] rounded-full mb-3" />
-          <div className="h-2 w-1/2 bg-white/[0.05] rounded-full mb-2" />
-          <div className="h-2 w-2/3 bg-white/[0.05] rounded-full mb-4" />
-          <div className="flex gap-2">
-            <div className="h-1.5 w-1.5 rounded-full bg-white/20" />
-            <div className="h-1.5 w-1.5 rounded-full bg-white/20" />
-            <div className="h-1.5 w-1.5 rounded-full bg-white/20" />
-          </div>
-        </motion.div>
-      ))}
-    </div>
-  );
+const fadeUp = {
+  hidden: { opacity: 0, y: 24 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: i * 0.1, duration: 0.5, ease: "easeOut" as const },
+  }),
 }
 
-const FEATURES = [
-  { icon: Zap, title: 'Parallel Execution', description: 'Run all five models simultaneously for instant comparison.' },
-  { icon: BarChart3, title: 'Smart Comparison', description: 'Confidence scores, speed metrics, and ranked results.' },
-  { icon: Shield, title: 'Production Ready', description: 'Battle-tested architecture. Deploy with confidence.' },
-  { icon: Cpu, title: 'Five Architectures', description: 'Compare ResNet, EfficientNet, ViT, DenseNet, and MobileNet.' },
-];
+function polylinePoints(values: number[], min: number, max: number, w: number, h: number, padY: number): string {
+  const range = max - min || 1
+  return values
+    .map((v, i) => {
+      const x = (i / (values.length - 1)) * w
+      const y = padY + (1 - (v - min) / range) * (h - padY * 2)
+      return `${x},${y}`
+    })
+    .join(" ")
+}
 
-const MODELS_PREVIEW = ['ResNet-50', 'EfficientNet-B0', 'Vision Transformer', 'DenseNet-121', 'MobileNetV3'];
+type Phase = "upload" | "analyzing" | "result"
 
-export default function LandingPage() {
-  const ref = useRef(null);
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ['start start', 'end start'],
-  });
-  const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
-  const scale = useTransform(scrollYProgress, [0, 0.5], [1, 0.95]);
+export function LandingPage() {
+  const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const [phase, setPhase] = useState<Phase>("upload")
+  const [progress, setProgress] = useState(0)
+  const [result, setResult] = useState<ApiResponse | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = useCallback((f: File) => {
+    if (!f.type.startsWith("image/")) return
+    setFile(f)
+    const url = URL.createObjectURL(f)
+    setPreview(url)
+    setPhase("upload")
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setDragging(false)
+    const f = e.dataTransfer.files[0]
+    if (f) handleFile(f)
+  }, [handleFile])
+
+  const clearFile = useCallback(() => {
+    if (preview) URL.revokeObjectURL(preview)
+    setFile(null)
+    setPreview(null)
+    setPhase("upload")
+    setProgress(0)
+  }, [preview])
+
+  const handleAnalyze = useCallback(async () => {
+    if (!file) return
+    setPhase("analyzing")
+    setProgress(0)
+
+    let intervalId: ReturnType<typeof setInterval> | undefined
+
+    try {
+      intervalId = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 90) return prev
+          return prev + Math.random() * 15 + 5
+        })
+      }, 200)
+
+      const tensor = await preprocessImage(file)
+      setProgress(95)
+
+      const apiResult = await runInference(tensor)
+      setProgress(100)
+
+      clearInterval(intervalId)
+      setResult(apiResult)
+      setPhase("result")
+    } catch (err: any) {
+      clearInterval(intervalId)
+      setPhase("upload")
+      console.error("Inference error:", err.message || err)
+    }
+  }, [file])
+
+  const { trainAcc, validAcc } = trainingData
+  const allValues = [...trainAcc, ...validAcc]
+  const yMin = Math.floor(Math.min(...allValues) / 5) * 5
+  const yMax = Math.ceil(Math.max(...allValues) / 5) * 5
+  const nTicks = Math.ceil((yMax - yMin) / 5)
+  const svgW = 800
+  const svgH = 320
+  const padY = 48
+  const chartW = svgW - 70
+  const chartH = svgH
+
+  const trainLine = polylinePoints(trainAcc, yMin, yMax, chartW, chartH, padY)
+  const validLine = polylinePoints(validAcc, yMin, yMax, chartW, chartH, padY)
 
   return (
-    <div ref={ref} className="min-h-screen bg-pure-black noise-bg overflow-hidden">
-      <HeroBackground />
-
-      {/* Header */}
-      <header className="relative z-10 flex items-center justify-between px-8 py-6">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white">
-            <Sparkles size={16} className="text-black" strokeWidth={1.5} />
-          </div>
-          <span className="text-sm font-semibold text-white">Orion</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <Link to="/dashboard" className="text-sm text-white/50 hover:text-white/80 transition-colors">
-            Dashboard
-          </Link>
-          <Link
-            to="/upload"
-            className="flex items-center gap-2 px-5 py-2.5 bg-white text-black text-sm font-medium rounded-lg hover:bg-white/90 transition-all duration-200"
-          >
-            Get Started
-            <ArrowRight size={14} />
-          </Link>
+    <div className="min-h-screen bg-black-950 text-white">
+      <header className="fixed top-0 inset-x-0 z-40 flex items-center justify-between h-14 px-6 bg-black/40 backdrop-blur-2xl border-b border-white/[0.04]">
+        <div className="flex items-center gap-2.5">
+          <img src="/orion.svg" alt="Orion" className="h-7 w-7 rounded-lg" />
+          <span className="text-sm font-semibold tracking-tight">Orion</span>
         </div>
       </header>
 
-      {/* Hero */}
-      <motion.section className="relative z-10 flex flex-col items-center text-center px-6 pt-32 pb-40" style={{ opacity, scale }}>
-        <motion.div
-          className="inline-flex items-center gap-2 glass px-4 py-1.5 rounded-full mb-8"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.5 }}
-        >
-          <div className="w-2 h-2 rounded-full bg-white/30" />
-          <span className="text-xs text-white/60">AI Image Classification Platform</span>
-        </motion.div>
-
-        <motion.h1
-          className="text-hero font-extrabold text-gradient max-w-4xl mb-6"
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.6 }}
-        >
-          Compare five AI models. Find the best one.
-        </motion.h1>
-
-        <motion.p
-          className="text-lg text-white/40 max-w-xl mb-12 leading-relaxed"
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.6 }}
-        >
-          Run ResNet, EfficientNet, Vision Transformer, DenseNet, and MobileNet
-          against your images. Compare predictions, speed, and accuracy — all in one place.
-        </motion.p>
-
-        <motion.div
-          className="flex items-center gap-4"
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4, duration: 0.6 }}
-        >
-          <Link
-            to="/upload"
-            className="flex items-center gap-2 px-8 py-3.5 bg-white text-black text-sm font-semibold rounded-xl hover:bg-white/90 transition-all duration-200 shadow-glow"
+      <main>
+        <section className="relative pt-24 pb-16 px-6">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.04),transparent_70%)]" />
+          <motion.div
+            initial={{ opacity: 0, y: 32 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, ease: "easeOut" }}
+            className="relative max-w-3xl mx-auto text-center"
           >
-            Start Analyzing
-            <ArrowRight size={16} />
-          </Link>
-          <Link
-            to="/dashboard"
-            className="flex items-center gap-2 px-8 py-3.5 glass text-white/70 text-sm font-medium rounded-xl hover:bg-white/[0.06] hover:text-white transition-all duration-200"
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2, duration: 0.5 }}
+              className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/[0.03] border border-white/[0.06] rounded-full text-[11px] text-white/50 font-medium mb-6"
+              style={{ backdropFilter: "blur(24px)" }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-white/60" />
+              White Blood Cell Classification
+            </motion.div>
+
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight leading-[1.1] text-balance">
+              Classify white blood cells
+              <br />
+              <span className="text-white/40">with a custom CNN.</span>
+            </h1>
+
+            <p className="mt-5 text-base text-white/35 leading-relaxed max-w-lg mx-auto text-balance">
+              runs a customized CNN model trained entirely from scratch to classify 4 types of white blood cell with confident score
+            </p>
+          </motion.div>
+        </section>
+
+        <section className="max-w-4xl mx-auto px-6 pb-20">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.6 }}
           >
-            View Dashboard
-          </Link>
-        </motion.div>
-      </motion.section>
+            <AnimatePresence mode="wait">
+              {phase === "upload" && (
+                <motion.div key="upload" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  {!file ? (
+                    <Card
+                      padding="lg"
+                      className={`text-center cursor-pointer transition-colors border-dashed ${dragging ? "border-white/20 bg-white/[0.06]" : ""}`}
+                      onDrop={handleDrop}
+                      onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+                      onDragLeave={() => setDragging(false)}
+                      onClick={() => inputRef.current?.click()}
+                    >
+                      <div className={`mx-auto h-16 w-16 mb-5 bg-white/[0.04] border ${dragging ? "border-white/20" : "border-white/[0.06]"} rounded-2xl flex items-center justify-center transition-colors`}>
+                        {dragging ? <Upload className="h-7 w-7 text-white/50" /> : <Image className="h-7 w-7 text-white/15" />}
+                      </div>
+                      <p className="text-base font-medium text-white/70">
+                        {dragging ? "Drop image here" : "Try the model — drop an image here"}
+                      </p>
+                      <p className="text-sm text-white/25 mt-1.5">or click to browse files</p>
+                      <p className="text-[11px] text-white/15 mt-3">Supports .jpeg, .png, .webp</p>
+                      <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} className="hidden" aria-label="Upload image" />
+                    </Card>
+                  ) : (
+                    <Card padding="lg">
+                      <div className="flex flex-col sm:flex-row items-start gap-6">
+                        <div className="relative group shrink-0">
+                          <img src={preview!} alt="Preview" className="h-44 w-44 object-cover rounded-xl border border-white/[0.06]" />
+                          <button onClick={clearFile} className="absolute -top-2 -right-2 h-6 w-6 bg-black/90 border border-white/[0.1] rounded-full flex items-center justify-center text-white/50 hover:text-white/80 transition-colors opacity-0 group-hover:opacity-100" aria-label="Remove image">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-3">
+                            <FileImage className="h-4 w-4 text-white/30" />
+                            <p className="text-sm font-medium truncate">{file.name}</p>
+                            <Badge>{(file.size / 1024 / 1024).toFixed(1)} MB</Badge>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-sm text-white/30 mb-5">
+                            <Check className="h-3.5 w-3.5 text-emerald-400" />
+                            Ready for analysis
+                          </div>
+                          <div className="flex gap-2">
+                            <Button size="md" onClick={handleAnalyze}>
+                              Analyze
+                              <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                            </Button>
+                            <Button size="md" variant="ghost" onClick={clearFile}>Remove</Button>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  )}
+                </motion.div>
+              )}
 
-      {/* Model Cards Row */}
-      <motion.section
-        className="relative z-10 max-w-6xl mx-auto px-6 pb-32"
-        initial={{ opacity: 0, y: 40 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-100px' }}
-        transition={{ duration: 0.6 }}
-      >
-        <div className="text-center mb-12">
-          <h2 className="text-2xl font-bold text-white/90 mb-3">Five State-of-the-Art Models</h2>
-          <p className="text-white/40">Built-in. Ready to compare. No setup required.</p>
-        </div>
-        <div className="grid grid-cols-5 gap-3">
-          {MODELS_PREVIEW.map((name, i) => (
-            <motion.div
-              key={name}
-              className="glass-card p-4 text-center"
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.1, duration: 0.4 }}
-              whileHover={{ y: -4 }}
-            >
-              <div className="w-10 h-10 rounded-lg bg-white/[0.06] flex items-center justify-center mx-auto mb-3">
-                <Cpu size={18} className="text-white/50" strokeWidth={1.5} />
+              {phase === "analyzing" && (
+                <motion.div key="analyzing" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+                  <Card padding="md">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-sm font-semibold">Running Inference</h2>
+                      <Badge>Running</Badge>
+                    </div>
+                    <ProgressBar value={progress} size="lg" showPercentage label="Inference Progress" />
+                    <div className="flex items-center gap-3 mt-4">
+                      <Loader2 className="h-4 w-4 text-white/40 animate-spin" />
+                      <span className="text-sm text-white/30">Processing image...</span>
+                    </div>
+                  </Card>
+                </motion.div>
+              )}
+
+              {phase === "result" && result && (
+                <motion.div key="result" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+                  <Card padding="md">
+                    <div className="flex flex-col sm:flex-row items-start gap-4">
+                      <img src={preview!} alt="Analyzed" className="h-32 w-32 object-cover rounded-xl border border-white/[0.06] shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                          <span className="text-sm font-semibold">Analysis Complete</span>
+                          <Badge variant="success">{result.inferenceTime}ms</Badge>
+                        </div>
+                        <div className="flex items-baseline gap-2 mt-2">
+                          <span className="text-3xl font-semibold tracking-tight capitalize">{result.label}</span>
+                          <span className="text-xl text-white/40 tabular-nums">{result.confidence}%</span>
+                        </div>
+                        <p className="text-sm text-white/25 mt-1">confidence</p>
+                        <div className="flex gap-2 mt-4">
+                          <Button size="sm" onClick={() => { clearFile() }}>Try Another</Button>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        </section>
+
+        <section className="max-w-4xl mx-auto px-6 pb-24">
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5, duration: 0.6 }}
+          >
+            <Card padding="lg" hover>
+              <div className="flex items-center gap-3 mb-2">
+                <TrendingUp className="h-5 w-5 text-white/35" />
+                <h2 className="text-lg font-semibold">Training Accuracy</h2>
               </div>
-              <p className="text-xs font-medium text-white/70 leading-tight">{name}</p>
-            </motion.div>
-          ))}
-        </div>
-      </motion.section>
+              <p className="text-sm text-white/30 mb-6">{trainingData.epochs} epochs on white blood cell dataset</p>
 
-      {/* Features */}
-      <motion.section
-        className="relative z-10 max-w-6xl mx-auto px-6 pb-48"
-        initial={{ opacity: 0, y: 40 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-100px' }}
-        transition={{ duration: 0.6 }}
-      >
-        <div className="text-center mb-16">
-          <h2 className="text-2xl font-bold text-white/90 mb-3">Built for speed and clarity</h2>
-          <p className="text-white/40">Everything you need to compare and choose the right model.</p>
-        </div>
-        <div className="grid grid-cols-4 gap-4">
-          {FEATURES.map((feature, i) => (
-            <motion.div
-              key={feature.title}
-              className="glass-card-hover p-6"
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.1, duration: 0.4 }}
-            >
-              <div className="w-9 h-9 rounded-lg bg-white/[0.06] flex items-center justify-center mb-4">
-                <feature.icon size={16} className="text-white/60" strokeWidth={1.5} />
+              <div className="overflow-x-auto">
+                <svg viewBox={`0 0 ${svgW} ${svgH}`} className="w-full h-auto" role="img" aria-label="Training accuracy chart">
+                  {Array.from({ length: nTicks + 1 }).map((_, i) => {
+                    const val = yMin + i * 5
+                    const y = padY + (1 - (val - yMin) / (yMax - yMin)) * (chartH - padY * 2)
+                    return (
+                      <g key={i}>
+                        <line x1={60} x2={svgW - 10} y1={y} y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth={1} />
+                        <text x={52} y={y + 5} textAnchor="end" className="select-none" fill="rgba(255,255,255,0.25)" fontSize={13} fontWeight={500}>{val}%</text>
+                      </g>
+                    )
+                  })}
+                  {Array.from({ length: trainingData.epochs }).map((_, i) => {
+                    const x = 60 + (i / (trainingData.epochs - 1)) * chartW
+                    return i % 4 === 0 ? (
+                      <text key={i} x={x} y={chartH - 10} textAnchor="middle" className="select-none" fill="rgba(255,255,255,0.2)" fontSize={13} fontWeight={500}>{i + 1}</text>
+                    ) : null
+                  })}
+                  <text x={60 + chartW / 2} y={chartH - 2} textAnchor="middle" className="select-none" fill="rgba(255,255,255,0.15)" fontSize={12}>Epoch</text>
+
+                  <defs>
+                    <linearGradient id="trainFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="rgba(255,255,255,0.15)" />
+                      <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+                    </linearGradient>
+                    <linearGradient id="validFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="rgba(255,255,255,0.06)" />
+                      <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+                    </linearGradient>
+                  </defs>
+
+                  <motion.polygon
+                    initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
+                    transition={{ delay: 0.6, duration: 0.8 }}
+                    fill="url(#trainFill)"
+                    points={`0,${chartH - padY} ${trainLine} ${chartW},${chartH - padY}`}
+                    transform={`translate(${60}, 0)`}
+                  />
+
+                  <motion.polyline
+                    initial={{ pathLength: 0 }} whileInView={{ pathLength: 1 }} viewport={{ once: true }}
+                    transition={{ delay: 0.4, duration: 1.5, ease: "easeInOut" }}
+                    fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth={2.5}
+                    strokeLinecap="round" strokeLinejoin="round"
+                    points={trainLine} transform={`translate(${60}, 0)`}
+                  />
+
+                  <motion.polygon
+                    initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}
+                    transition={{ delay: 0.7, duration: 0.8 }}
+                    fill="url(#validFill)"
+                    points={`0,${chartH - padY} ${validLine} ${chartW},${chartH - padY}`}
+                    transform={`translate(${60}, 0)`}
+                  />
+
+                  <motion.polyline
+                    initial={{ pathLength: 0 }} whileInView={{ pathLength: 1 }} viewport={{ once: true }}
+                    transition={{ delay: 0.5, duration: 1.5, ease: "easeInOut" }}
+                    fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth={2}
+                    strokeDasharray="6 4" strokeLinecap="round" strokeLinejoin="round"
+                    points={validLine} transform={`translate(${60}, 0)`}
+                  />
+                </svg>
               </div>
-              <h3 className="text-sm font-semibold text-white/80 mb-2">{feature.title}</h3>
-              <p className="text-xs text-white/40 leading-relaxed">{feature.description}</p>
-            </motion.div>
-          ))}
-        </div>
-      </motion.section>
 
-      {/* Floating cards demo */}
-      <motion.section
-        className="relative z-10 max-w-4xl mx-auto px-6 pb-48"
-        initial={{ opacity: 0 }}
-        whileInView={{ opacity: 1 }}
-        viewport={{ once: true, margin: '-100px' }}
-        transition={{ duration: 0.6 }}
-      >
-        <div className="glass-card p-8 text-center relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent" />
-          <h2 className="relative text-xl font-bold text-white/90 mb-2">See it in action</h2>
-          <p className="relative text-sm text-white/40 mb-8">Upload an image and watch all five models run in parallel.</p>
-          <FloatingCards />
-        </div>
-      </motion.section>
+              <div className="flex items-center justify-center gap-8 mt-4">
+                <div className="flex items-center gap-2">
+                  <span className="h-0.5 w-6 bg-white/70 rounded-full" />
+                  <span className="text-sm text-white/35">Training Accuracy</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-0.5 w-6 border-t-2 border-dashed border-white/30" />
+                  <span className="text-sm text-white/35">Validation Accuracy</span>
+                </div>
+              </div>
+            </Card>
+          </motion.div>
+        </section>
 
-      {/* Footer */}
-      <footer className="relative z-10 border-t border-white/[0.04] py-8 px-6">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-6 h-6 rounded-md bg-white/[0.06]">
-              <Sparkles size={12} className="text-white/40" strokeWidth={1.5} />
-            </div>
-            <span className="text-xs text-white/30">Orion</span>
+        <section className="max-w-4xl mx-auto px-6 pb-24">
+          <div className="text-center mb-14">
+            <h2 className="text-2xl font-semibold tracking-tight">Model Highlights</h2>
+            <p className="mt-2 text-sm text-white/35">Everything you need to trust the classification.</p>
           </div>
-          <p className="text-xs text-white/20">Precision. Intelligence. Speed.</p>
-        </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-[minmax(160px,auto)]">
+            <motion.div custom={0} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="lg:col-span-2">
+              <Card hover padding="md" className="h-full flex flex-col justify-between">
+                <div>
+                  <div className="h-9 w-9 mb-3 bg-white/[0.04] border border-white/[0.06] rounded-xl flex items-center justify-center">
+                    <Brain className="h-4 w-4 text-white/40" />
+                  </div>
+                  <h3 className="text-sm font-semibold mb-1">Custom Architecture</h3>
+                  <p className="text-xs text-white/35 leading-relaxed">
+                    3 convolutional blocks with batch normalization, dropout regularization, global average pooling, and dense classification head. Trained from scratch — no pretrained weights, no transfer learning.
+                  </p>
+                </div>
+                <div className="flex items-center gap-4 mt-4 text-[11px] text-white/20">
+                  <span>3 Conv Blocks</span>
+                  <span className="w-0.5 h-0.5 rounded-full bg-white/10" />
+                  <span>BatchNorm + Dropout</span>
+                  <span className="w-0.5 h-0.5 rounded-full bg-white/10" />
+                  <span>2.1M Params</span>
+                </div>
+              </Card>
+            </motion.div>
+
+            <motion.div custom={1} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="lg:row-span-2">
+              <Card hover padding="md" className="h-full flex flex-col justify-between">
+                <div>
+                  <div className="h-9 w-9 mb-3 bg-white/[0.04] border border-white/[0.06] rounded-xl flex items-center justify-center">
+                    <Activity className="h-4 w-4 text-white/40" />
+                  </div>
+                  <h3 className="text-sm font-semibold mb-1">Performance</h3>
+                  <p className="text-xs text-white/35 leading-relaxed mb-4">
+                    Converges rapidly within first 5 epochs. Peak validation accuracy at epoch 15.
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between text-[10px] text-white/30 mb-1">
+                      <span>Training Accuracy</span>
+                      <span className="tabular-nums">98.30%</span>
+                    </div>
+                    <div className="h-1 bg-white/[0.04] rounded-full overflow-hidden">
+                      <motion.div initial={{ width: 0 }} whileInView={{ width: "98.3%" }} viewport={{ once: true }} transition={{ delay: 0.8, duration: 0.8 }} className="h-full bg-white/70 rounded-full" />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[10px] text-white/30 mb-1">
+                      <span>Validation Accuracy</span>
+                      <span className="tabular-nums">99.19%</span>
+                    </div>
+                    <div className="h-1 bg-white/[0.04] rounded-full overflow-hidden">
+                      <motion.div initial={{ width: 0 }} whileInView={{ width: "99.19%" }} viewport={{ once: true }} transition={{ delay: 0.9, duration: 0.8 }} className="h-full bg-white/30 rounded-full" />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[10px] text-white/30 mb-1">
+                      <span>Final Loss</span>
+                      <span className="tabular-nums">0.0632</span>
+                    </div>
+                    <div className="h-1 bg-white/[0.04] rounded-full overflow-hidden">
+                      <motion.div initial={{ width: 0 }} whileInView={{ width: "93.7%" }} viewport={{ once: true }} transition={{ delay: 1, duration: 0.8 }} className="h-full bg-white/15 rounded-full" />
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </motion.div>
+
+            <motion.div custom={2} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp}>
+              <Card hover padding="md" className="h-full">
+                <div className="h-9 w-9 mb-3 bg-white/[0.04] border border-white/[0.06] rounded-xl flex items-center justify-center">
+                  <Gauge className="h-4 w-4 text-white/40" />
+                </div>
+                <h3 className="text-sm font-semibold mb-1">Fast Inference</h3>
+                <p className="text-xs text-white/35 leading-relaxed">
+                  Lightweight 6.04M parameter model. Runs inference in milliseconds on CPU or GPU.
+                </p>
+                <div className="mt-4 flex items-baseline gap-1">
+                  <span className="text-xl font-semibold tabular-nums">~14ms</span>
+                  <span className="text-[10px] text-white/25">per image</span>
+                </div>
+              </Card>
+            </motion.div>
+
+            <motion.div custom={3} initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp}>
+              <Card hover padding="md" className="h-full">
+                <div className="h-9 w-9 mb-3 bg-white/[0.04] border border-white/[0.06] rounded-xl flex items-center justify-center">
+                  <Shield className="h-4 w-4 text-white/40" />
+                </div>
+                <h3 className="text-sm font-semibold mb-1">Confidence Scoring</h3>
+                <p className="text-xs text-white/35 leading-relaxed">
+                  Softmax output layer provides calibrated probability distribution across all 4 cell types.
+                </p>
+                <div className="mt-4 flex items-baseline gap-1">
+                  <span className="text-xl font-semibold">4</span>
+                  <span className="text-[10px] text-white/25">class outputs</span>
+                </div>
+              </Card>
+            </motion.div>
+          </div>
+        </section>
+
+        <section className="max-w-4xl mx-auto px-6 pb-24">
+          <div className="text-center mb-14">
+            <h2 className="text-2xl font-semibold tracking-tight">Built for hematology</h2>
+            <p className="mt-2 text-sm text-white/35">Single custom CNN. Four cell types. Fast, interpretable results.</p>
+          </div>
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="relative p-0.5 bg-white/[0.04] border border-white/[0.06] overflow-hidden hover:border-white/[0.15] hover:shadow-[0_0_24px_4px_rgba(255,255,255,0.05)] transition-all duration-150"
+            style={{ borderRadius: "var(--radius-glass)" }}
+          >
+            <div className="bg-black/80 backdrop-blur-2xl p-8" style={{ borderRadius: "calc(var(--radius-glass) - 2px)" }}>
+              <div className="flex items-center justify-center gap-3 mb-6">
+                <img src="/orion.svg" alt="Orion" className="h-10 w-10 rounded-xl" />
+                <span className="text-sm font-semibold text-white/60">Orion</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {WBC_CLASSES.map((cls) => (
+                  <div key={cls.id} className="text-center space-y-2 p-3 bg-white/[0.02] border border-white/[0.04] rounded-xl">
+                    <p className="text-xs font-medium text-white/60">{cls.label}</p>
+                    <p className="text-[10px] text-white/25 leading-relaxed">{cls.description.slice(0, 60)}...</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-6 h-0.5 bg-white/[0.04] rounded-full" />
+              <div className="mt-6 flex items-center justify-center text-xs text-white/25 gap-6">
+                <span>6.04M Parameters</span>
+                <span className="w-1 h-1 rounded-full bg-white/15" />
+                <span>Trained from Scratch</span>
+                <span className="w-1 h-1 rounded-full bg-white/15" />
+                <span>99.19% Peak Accuracyc</span>
+              </div>
+            </div>
+          </motion.div>
+        </section>
+      </main>
+
+      <footer className="border-t border-white/[0.04] py-8 px-6 text-center text-sm text-white/20">
+        Orion — White Blood Cell Classification
       </footer>
     </div>
-  );
+  )
 }

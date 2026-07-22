@@ -1,72 +1,45 @@
-import { ModelInfo } from '@/types';
+import type { WbcClass, ClassProbability } from "../types"
 
-export const MODELS: ModelInfo[] = [
-  {
-    id: 'resnet50',
-    name: 'ResNet-50',
-    description: 'Deep residual learning with 50 layers. Excellent balance of speed and accuracy for general image classification.',
-    architecture: 'Residual Network',
-    speed: 'fast',
-    accuracy: 'high',
-    resourceUsage: 'medium',
-    parameters: '25.6M',
-  },
-  {
-    id: 'efficientnet-b0',
-    name: 'EfficientNet-B0',
-    description: 'State-of-the-art efficient architecture using compound scaling. Optimized for both accuracy and efficiency.',
-    architecture: 'EfficientNet',
-    speed: 'fast',
-    accuracy: 'high',
-    resourceUsage: 'low',
-    parameters: '5.3M',
-  },
-  {
-    id: 'vit-base',
-    name: 'Vision Transformer',
-    description: 'Transformer-based architecture treating images as sequences of patches. Strong at capturing global context.',
-    architecture: 'ViT-B/16',
-    speed: 'medium',
-    accuracy: 'high',
-    resourceUsage: 'high',
-    parameters: '86M',
-  },
-  {
-    id: 'densenet121',
-    name: 'DenseNet-121',
-    description: 'Densely connected convolutional network. Feature reuse leads to strong performance with fewer parameters.',
-    architecture: 'DenseNet',
-    speed: 'medium',
-    accuracy: 'high',
-    resourceUsage: 'medium',
-    parameters: '8M',
-  },
-  {
-    id: 'mobilenet-v3',
-    name: 'MobileNetV3-Large',
-    description: 'Mobile-optimized architecture using neural architecture search. Ultra-fast inference on edge devices.',
-    architecture: 'MobileNetV3',
-    speed: 'fast',
-    accuracy: 'medium',
-    resourceUsage: 'low',
-    parameters: '5.4M',
-  },
-];
+export const MODEL_NAME = "Orion CNN"
+export const MODEL_VERSION = "1.0.0"
+export const MODEL_PARAMS = "2.1M"
+export const MODEL_DESCRIPTION = "Custom convolutional neural network trained from scratch on white blood cell images. Classifies cells into 4 types: basophil, eosinophil, neutrophil, and monocyte."
 
-export const SPEED_LABELS: Record<string, string> = {
-  fast: '< 100ms',
-  medium: '100-300ms',
-  slow: '> 300ms',
-};
+export const WBC_CLASSES: { id: WbcClass; label: string; description: string }[] = [
+  { id: "basophil", label: "Basophil", description: "Rarest type of white blood cell, making up less than 1% of your total white blood cell count. Despite their low numbers, they are a vital component of the immune system and play an active role in surveilling for invaders and regulating inflammatory responses." },
+  { id: "eosinophil", label: "Eosinophil", description: "A type of specialized white blood cell (leukocyte) produced in the bone marrow." },
+  { id: "neutrophil", label: "Neutrophil", description: "The most abundant type of white blood cell in the human body, acting as the primary first responders of the innate immune system." },
+  { id: "monocyte", label: "Monocyte", description: "The largest type of white blood cell and serve as a crucial pillar of the innate immune system." },
+]
 
-export const ACCURACY_LABELS: Record<string, string> = {
-  high: '≥ 90%',
-  medium: '75-89%',
-  low: '< 75%',
-};
+export function getClassLabel(id: WbcClass): string {
+  return WBC_CLASSES.find((c) => c.id === id)?.label ?? id
+}
 
-export const RESOURCE_LABELS: Record<string, string> = {
-  low: 'Low',
-  medium: 'Moderate',
-  high: 'High',
-};
+export function getClassInfo(id: WbcClass) {
+  return WBC_CLASSES.find((c) => c.id === id)
+}
+
+export const DEMO_ACCURACY = 87.3
+export const DEMO_AVG_LATENCY = 14.2
+export const DEMO_TOTAL_RUNS = 1247
+
+export function generateDemoProbabilities(topClass?: WbcClass): ClassProbability[] {
+  const baseProbs: Record<WbcClass, number> = {
+    basophil: 3 + Math.random() * 5,
+    eosinophil: 5 + Math.random() * 8,
+    neutrophil: 40 + Math.random() * 30,
+    monocyte: 10 + Math.random() * 15,
+  }
+
+  if (topClass) {
+    baseProbs[topClass] = 75 + Math.random() * 20
+  }
+
+  const total = Object.values(baseProbs).reduce((a, b) => a + b, 0)
+  return WBC_CLASSES.map((c) => ({
+    className: c.id,
+    label: c.label,
+    probability: Math.round((baseProbs[c.id] / total) * 1000) / 10,
+  }))
+}

@@ -1,25 +1,26 @@
-import { motion } from 'framer-motion';
-import { LucideIcon } from 'lucide-react';
+import { motion, type HTMLMotionProps } from "framer-motion"
+import { Tooltip } from "./Tooltip"
 
-interface IconButtonProps {
-  icon: LucideIcon;
-  label: string;
-  onClick?: () => void;
-  active?: boolean;
-  className?: string;
+interface IconButtonProps extends HTMLMotionProps<"button"> {
+  tooltip?: string
+  active?: boolean
 }
 
-export default function IconButton({ icon: Icon, label, onClick, active, className = '' }: IconButtonProps) {
-  return (
+export function IconButton({ tooltip, active, className = "", children, ...props }: IconButtonProps) {
+  const button = (
     <motion.button
-      className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors duration-200
-        ${active ? 'bg-white/[0.08] text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/[0.04]'}
-        ${className}`}
-      whileTap={{ scale: 0.92 }}
-      onClick={onClick}
-      title={label}
+      whileHover={{ scale: 1.1 }}
+      whileTap={{ scale: 0.95 }}
+      className={`relative flex items-center justify-center h-9 w-9 rounded-xl text-white/40 hover:text-white/70 hover:bg-white/[0.06] transition-colors duration-200 ${active ? "text-white bg-white/[0.08]" : ""} ${className}`}
+      {...props}
     >
-      <Icon size={18} strokeWidth={1.5} />
+      {children}
     </motion.button>
-  );
+  )
+
+  if (tooltip) {
+    return <Tooltip content={tooltip}>{button}</Tooltip>
+  }
+
+  return button
 }
