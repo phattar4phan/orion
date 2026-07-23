@@ -16,6 +16,11 @@
   --color-black-900: #1a1a1a;
   --color-black-950: #0a0a0a;
 
+  --color-slate-blue: #95a7b0;
+  --color-pale-steel: #deeaf4;
+  --color-ice-blue: #f5f7ff;
+  --color-cool-gray: #c3c5c9;
+
   --radius-glass: 16px;
   --radius-glass-sm: 12px;
 
@@ -51,7 +56,7 @@
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+  scrollbar-color: rgba(149, 167, 176, 0.15) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -63,8 +68,19 @@
 }
 
 *::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(149, 167, 176, 0.15);
   border-radius: 3px;
+}
+
+.hero-dot-grid {
+  background-image: radial-gradient(circle, rgba(149, 167, 176, 0.2) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 35%, transparent 75%);
+}
+
+.page-texture {
+  background-image: radial-gradient(circle, rgba(149, 167, 176, 0.05) 0.5px, transparent 0.5px);
+  background-size: 16px 16px;
 }
 
 @media (prefers-reduced-motion: reduce) {

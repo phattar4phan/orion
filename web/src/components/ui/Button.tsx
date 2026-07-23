@@ -15,13 +15,13 @@ interface ButtonProps extends Omit<HTMLMotionProps<"button">, "children"> {
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    "bg-white text-black hover:bg-white/90 shadow-glass-sm",
+    "bg-white text-black-950 hover:bg-white/90 shadow-glass-sm focus-visible:ring-2 focus-visible:ring-slate-blue/50",
   secondary:
-    "bg-white/5 text-white hover:bg-white/10 ring-1 ring-white/10",
+    "bg-white/5 text-white hover:bg-white/10 ring-1 ring-white/10 focus-visible:ring-2 focus-visible:ring-slate-blue/40",
   ghost:
-    "bg-transparent text-white/60 hover:text-white hover:bg-white/5",
+    "bg-transparent text-white/60 hover:text-white hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-slate-blue/30",
   danger:
-    "bg-red-500/10 text-red-400 hover:bg-red-500/20 ring-1 ring-red-500/20",
+    "bg-red-500/10 text-red-400 hover:bg-red-500/20 ring-1 ring-red-500/20 focus-visible:ring-2 focus-visible:ring-red-500/30",
 }
 
 const sizeClasses: Record<ButtonSize, string> = {

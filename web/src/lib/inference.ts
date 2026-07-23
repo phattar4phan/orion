@@ -26,6 +26,15 @@ function softmax(logits: number[]): number[] {
   return exps.map((v) => v / sum)
 }
 
+function energyScore(logits: number[], temperature: number = 1): number {
+  const scaled = logits.map((l) => l / temperature)
+  const maxLogit = Math.max(...scaled)
+  const logSumExp = maxLogit + Math.log(
+    scaled.reduce((sum, s) => sum + Math.exp(s - maxLogit), 0)
+  )
+  return -temperature * logSumExp
+}
+
 export async function preprocessImage(file: File): Promise<Float32Array> {
   const img = await createImageBitmap(file, { resizeWidth: IMG_SIZE, resizeHeight: IMG_SIZE })
 
@@ -54,11 +63,15 @@ export async function preprocessImage(file: File): Promise<Float32Array> {
   return tensor
 }
 
+const OOD_ENERGY_THRESHOLD = 2.0
+
 export interface ApiResponse {
   prediction: number
   label: string
   confidence: number
   inferenceTime: number
+  isOod: boolean
+  energyScore: number
 }
 
 const LABELS = ["basophil", "eosinophil", "monocyte", "neutrophil"]
@@ -76,6 +89,21 @@ export async function runInference(tensor: Float32Array): Promise<ApiResponse> {
 
   const outputName = sess.outputNames[0]
   const logits = Array.from(results[outputName].data as Float32Array)
+
+  const energy = energyScore(logits)
+  const isOod = energy > OOD_ENERGY_THRESHOLD
+
+  if (isOod) {
+    return {
+      prediction: -1,
+      label: "Not a white blood cell",
+      confidence: 0,
+      inferenceTime: Math.round((t1 - t0) * 10) / 10,
+      isOod: true,
+      energyScore: Math.round(energy * 100) / 100,
+    }
+  }
+
   const probs = softmax(logits)
 
   let bestIdx = 0
@@ -92,5 +120,7 @@ export async function runInference(tensor: Float32Array): Promise<ApiResponse> {
     label: LABELS[bestIdx],
     confidence: Math.round(bestProb * 1000) / 10,
     inferenceTime: Math.round((t1 - t0) * 10) / 10,
+    isOod: false,
+    energyScore: Math.round(energy * 100) / 100,
   }
 }

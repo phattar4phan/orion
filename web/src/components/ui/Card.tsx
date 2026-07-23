@@ -18,7 +18,7 @@ export function Card({ children, hover = false, padding = "md", className = "", 
     <motion.div
       whileHover={hover ? { y: -2 } : undefined}
       transition={{ duration: 0.15 }}
-      className={`bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] shadow-glass-sm hover:border-white/[0.15] hover:shadow-[0_0_24px_4px_rgba(255,255,255,0.05)] transition-all duration-150 ${paddingClasses[padding]} ${className}`}
+      className={`bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] shadow-glass-sm hover:border-slate-blue/20 hover:shadow-[0_0_28px_4px_rgba(149,167,176,0.08)] focus-within:border-slate-blue/20 focus-within:shadow-[0_0_28px_4px_rgba(149,167,176,0.08)] transition-all duration-200 ${paddingClasses[padding]} ${className}`}
       style={{ borderRadius: "var(--radius-glass)" }}
       {...props}
     >
