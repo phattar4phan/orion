@@ -32,7 +32,7 @@ npm run build (incase you want to build)
 ```
 
 ## AI Usage
-I use AI for designing and creating the landing page. for smoother UI/UX experiences, which I can't do it manually.
+I use AI for initial designing and creating the landing page. for smoother UI/UX experiences, which I can't do it manually. After the shipwright replied with being too vibecoded, I then added grid tables (add the first section you see when load) and clustered gradients (range from white-blue) to add more personal touch, also removed static glassmorphism header.
 
 ## License & Author
 Apache 2.0 - [phattar4phan](github.com/phattar4phan) (phattar4phan@gmail.com)
