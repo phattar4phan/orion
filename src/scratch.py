@@ -157,7 +157,7 @@ class CNN(nn.Module):
         return x
         
 model = CNN(num_classes=4).to(Device)
-criterion = nn.CrossEntropyLoss()
+criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # randomly select one test file
