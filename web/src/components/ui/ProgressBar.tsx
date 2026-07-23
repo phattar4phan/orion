@@ -27,7 +27,7 @@ export function ProgressBar({ value, max = 100, label, showPercentage = true, si
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
           transition={{ duration: 0.6, ease: "easeOut" }}
-          className={`h-full bg-white/80`}
+          className="h-full bg-slate-blue"
           style={{ borderRadius: 999 }}
         />
       </div>
